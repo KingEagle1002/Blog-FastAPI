@@ -1,28 +1,18 @@
-from fastapi import APIRouter, HTTPException , Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session 
-from Blog import database , models , token
-from Blog.hashing import Hash
-from datetime import timedelta
+from Blog import database, token, hash
 
+router = APIRouter(tags=["Authentication"], prefix="/Login")
+users_collection = database.users_collection
 
-
-router = APIRouter(
-    tags=['Authentication']
-)
-@router.post("/Login")
-def login(request: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(database.get_db)):
-    user = db.query(models.User).filter(
-        models.User.email == request.username).first()
+@router.post("/", response_model=None, summary="User Login")
+async def login(request: OAuth2PasswordRequestForm = Depends()):
+    user = await users_collection.find_one({"email": request.username})
     if not user:
-        raise HTTPException(
-            status_code=status
-            .HTTP_404_NOT_FOUND,
-              detail=f"Invalid Credentials"
-    )
-    if not Hash.verify(user.password,request.password):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail=f"Incorrect Password")
+        raise HTTPException(status_code=404, detail="Invalid Credentials")
     
-    access_token = token.create_access_token(data={"sub": user.email}
-    )
+    if not hash.Hash.verify(user["password"], request.password):
+        raise HTTPException(status_code=404, detail="Incorrect Password")
+    
+    access_token = token.create_access_token(data={"sub": user["email"]})
     return {"access_token": access_token, "token_type": "bearer"}

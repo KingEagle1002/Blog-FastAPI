@@ -1,55 +1,70 @@
 from fastapi import status, HTTPException
-from sqlalchemy.orm import Session 
-from Blog import models, schemas
+from Blog import database
+from Blog.schemas import Blog
+from bson import ObjectId
+
+# MongoDB blogs collection
+blogs_collection = database.blogs_collection
 
 
-def get_all(db: Session):
-    blogs = db.query(models.Blog).all()
+# Get all blogs
+async def get_all():
+    blogs = []
+    cursor = blogs_collection.find({})
+    async for blog in cursor:
+        blog["_id"] = str(blog["_id"]) 
+        blogs.append(blog)
     return blogs
 
-def create(request: schemas.Blog, db: Session):
-    new_blog = models.Blog(
-        title=request.title,
-        body=request.body,
-        user_id = 1
-    )
-    db.add(new_blog)
-    db.commit()
-    db.refresh(new_blog)
-    return new_blog   
+
+# Create new blog
+async def create(request: Blog, user_id: str = "1"):
+    new_blog = {
+        "title": request.title,
+        "body": request.body,
+        "user_id": user_id
+    }
+    result = await blogs_collection.insert_one(new_blog)
+    new_blog["_id"] = str(result.inserted_id)
+    return new_blog
 
 
-def destroy(id: int, db: Session):
-    blog = db.query(models.Blog).filter(models.Blog.id == id)
-
-    if not blog.first():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Blog with id {id} not found"
-        )
-    
-    blog.delete(synchronize_session=False)
-    db.commit()
-    return 'done'
-
-def update(id: int, request: schemas.Blog, db: Session):
-    blog = db.query(models.Blog).filter(models.Blog.id == id)
-
-    if not blog.first():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Blog with id {id} not found"
-        )
-    
-    blog.update(request.dict())
-    db.commit()
-    return 'done'
-
-def show(id: int, db: Session):
-    blog = db.query(models.Blog).filter(models.Blog.id == id).first()
+# Delete a blog
+async def destroy(id: str):
+    blog = await blogs_collection.find_one({"_id": ObjectId(id)})
     if not blog:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Blog with id {id} not found"
         )
+
+    await blogs_collection.delete_one({"_id": ObjectId(id)})
+    return {"message": "Blog deleted successfully"}
+
+
+# Update a blog
+async def update(id: str, request: Blog):
+    blog = await blogs_collection.find_one({"_id": ObjectId(id)})
+    if not blog:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Blog with id {id} not found"
+        )
+
+    await blogs_collection.update_one(
+        {"_id": ObjectId(id)},
+        {"$set": {"title": request.title, "body": request.body}}
+    )
+    return {"message": "Blog updated successfully"}
+
+
+# Get single blog
+async def show(id: str):
+    blog = await blogs_collection.find_one({"_id": ObjectId(id)})
+    if not blog:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Blog with id {id} not found"
+        )
+    blog["_id"] = str(blog["_id"])
     return blog

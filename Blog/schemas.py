@@ -1,55 +1,51 @@
-from pydantic import BaseModel 
-from typing import List , Optional
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional, List
+from bson import ObjectId
 
-# Blog schema for input
-class BlogBase(BaseModel):
+# ✅ Custom ObjectId type
+class PyObjectId(ObjectId):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, v):
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid objectid")
+        return ObjectId(v)
+
+    @classmethod
+    def __modify_schema__(cls, field_schema):
+        field_schema.update(type="string")
+
+# Blog Schema
+class Blog(BaseModel):
     title: str
     body: str
-
-class Blog(BlogBase):    
-      
-    class Config():
-        orm_mode = True
+    user_id: Optional[str]  # MongoDB ObjectId as string
 
 
+class ShowBlog(Blog):
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+
+    class Config:
+        allow_population_by_field_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+
+# User Schema
 class User(BaseModel):
     name: str
-    email: str
+    email: EmailStr
     password: str
-
-    class Config():
-        orm_mode = True
-
 
 class ShowUser(BaseModel):
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     name: str
-    email: str
-    blogs : List[Blog] =[]
+    email: EmailStr
+    blogs: Optional[List[ShowBlog]] = []
 
-    class Config():
-        orm_mode = True
-
-
-class ShowBlog(BaseModel):
-    title: str
-    body: str
-    creator : ShowUser
-
-    class Config():
-        orm_mode = True
-
-
-class Login(BaseModel):
-    email : str 
-    password: str
-
-    class Config():
-        orm_mode = True    
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-class TokenData(BaseModel):
-    username :Optional[str] = None              
-
+    class Config:
+        allow_population_by_field_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
